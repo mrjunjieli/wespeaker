@@ -8,8 +8,8 @@
 # multi-node + multi-gpus:
 #   bash run.sh --stage 3 --stop-stage 3 --HOST_NODE_ADDR "xxx.xxx.xxx.xxx:port" --num_nodes num_node
 
-stage=-1
-stop_stage=-1
+stage=3
+stop_stage=3
 
 HOST_NODE_ADDR="localhost:29400"
 num_nodes=1
@@ -18,11 +18,11 @@ job_id=2024
 data=data
 data_type="shard"  # shard/raw
 
-config=conf/resnet.yaml
-exp_dir=exp/ResNet34-TSTP-emb256-fbank80-num_frms200-aug0.6-spTrue-saFalse-ArcMargin-SGD-epoch150
-gpus="[0,1]"
+config=conf/xi_vector_plus.yaml
+exp_dir=exp/xi_vector_plus_tuan
+gpus="[0]"
 num_avg=10
-checkpoint=
+checkpoint=$exp_dir/models/model_50.pt
 
 trials="vox1_O_cleaned.kaldi vox1_E_cleaned.kaldi vox1_H_cleaned.kaldi"
 score_norm_method="asnorm"  # asnorm/snorm

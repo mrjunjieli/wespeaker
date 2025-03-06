@@ -30,7 +30,7 @@ from wespeaker.frontend import *
 from wespeaker.models.projections import get_projection
 from wespeaker.models.speaker_model import get_speaker_model
 from wespeaker.utils.checkpoint import load_checkpoint, save_checkpoint
-from wespeaker.utils.executor import run_epoch
+from wespeaker.utils.executor import run_epoch, eval_epoch
 from wespeaker.utils.file_utils import read_table
 from wespeaker.utils.utils import get_logger, parse_config_or_kwargs, set_seed, \
     spk2id
@@ -237,6 +237,19 @@ def train(config='conf/config.yaml', **kwargs):
                   scaler,
                   device=device,
                   configs=configs)
+        if epoch < configs['num_epochs']:
+            eval_epoch(train_dataloader,
+                    epoch_iter,
+                    ddp_model,
+                    criterion,
+                    optimizer,
+                    scheduler,
+                    margin_scheduler,
+                    epoch,
+                    logger,
+                    scaler,
+                    device=device,
+                    configs=configs)
 
         if rank == 0:
             if epoch % configs['save_epoch_interval'] == 0 or epoch > configs[
