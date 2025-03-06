@@ -20,7 +20,7 @@ data_type="shard"  # shard/raw
 
 config=conf/xi_vector_plus_vae.yaml
 exp_dir=exp/xi_vector_plus_vae
-gpus="[3]"
+gpus="[0]"
 num_avg=10
 checkpoint=$exp_dir/models/model_50.pt
 
