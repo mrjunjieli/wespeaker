@@ -111,6 +111,10 @@ class _SegU3XiMixin:
         var_diag = _propagate_diag_var_linear(var_diag, self.seg_1)
 
         if self.two_emb_layer:
+            # NOTE: this mirrors the original U^3-xi implementation and does
+            # not apply the ReLU that the base class applies before seg_bn_1.
+            # Kept as-is for reproducibility; every released U^3-xi config
+            # uses two_emb_layer: False, so this branch is not exercised.
             out = self.seg_bn_1(embed_a)
             embed_b = self.seg_2(out)
             var_diag = _propagate_diag_var_bn(var_diag, self.seg_bn_1)
