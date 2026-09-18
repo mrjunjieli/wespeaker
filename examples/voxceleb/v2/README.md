@@ -168,6 +168,7 @@ All results use margin warmup 0.0 -> 0.2, speed perturb, aug_prob=0.6, no spec_a
 * Model: `U_CUBE_XI_ECAPA_TDNN_GLOB_c512` / `U_CUBE_XI_ResNet34` / `U_CUBE_XI_ReDimNetB2`, with the `U_Cube_XI` pooling and the `arc_margin_uncertainty` projection
 * The model outputs a speaker embedding together with its covariance; stage 4 of the recipe writes it to `xvector_variance.scp` next to the embeddings
 * Stage 5 scores each trial twice: the ordinary cosine score goes to `exp_dir/scores`, the uncertainty-aware cosine score goes to `exp_dir/scores_uncertainty`
+* `batch_size` is per GPU, and the learning rate is scaled by `world_size * batch_size / 64` (see `schedulers.py`); keep that product unchanged when changing `--gpus`, otherwise the effective learning rate changes
 * Large margin fine-tuning is supported via `conf/u_cube_xi_ecapa_lm.yaml`
 
 ```bash
