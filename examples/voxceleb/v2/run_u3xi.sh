@@ -11,6 +11,8 @@
 # differences being:
 #   * stage 4 calls local/extract_vox_uncertainty.sh, which dumps the
 #     embedding covariance next to the embeddings;
+#   * stage 5 additionally runs local/score_uncertainty.sh, the
+#     uncertainty-aware cosine scoring, into ${exp_dir}/scores_uncertainty;
 #   * stage 8 (TorchScript export) is not supported, because the
 #     multi-view self-attention pooling cannot be scripted.
 # All other stages are identical to run.sh, so the standard models are
@@ -111,6 +113,15 @@ fi
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
   echo "Score ..."
   local/score.sh \
+    --stage 1 --stop-stage 2 \
+    --data ${data} \
+    --exp_dir $exp_dir \
+    --trials "$trials"
+
+  # Uncertainty-aware cosine scoring, using the covariance dumped in stage 4.
+  # Results go to ${exp_dir}/scores_uncertainty.
+  echo "Uncertainty-aware score ..."
+  local/score_uncertainty.sh \
     --stage 1 --stop-stage 2 \
     --data ${data} \
     --exp_dir $exp_dir \
