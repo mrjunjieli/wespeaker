@@ -59,7 +59,11 @@ def run_epoch(dataloader, epoch_iter, model, criterion, optimizer, scheduler,
 
             outputs = model(features)  # (embed_a,embed_b) in most cases
             embeds = outputs[-1] if isinstance(outputs, tuple) else outputs
-            outputs = model.module.projection(embeds, targets)
+            if isinstance(outputs, tuple) and len(outputs) == 3:
+                # U^3-xi models return (embed_a, covariance, embed_b)
+                outputs = model.module.projection(embeds, outputs[1], targets)
+            else:
+                outputs = model.module.projection(embeds, targets)
             if isinstance(outputs, tuple):
                 outputs, loss = outputs
             else:

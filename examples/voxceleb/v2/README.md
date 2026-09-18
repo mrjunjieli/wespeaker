@@ -161,3 +161,46 @@ All results use margin warmup 0.0 -> 0.2, speed perturb, aug_prob=0.6, no spec_a
 | Author's GitHub | √ | 0.29 | 0.52 | 0.99 |
 | This PR (w/ Official Ckpt) | √ | **0.276** | 0.518 | 1.003 |
 | This PR (trained from scratch) | √ | 0.330 | **0.502** | **0.985** |
+
+## U³-xi Results
+
+* See the [Paper](https://arxiv.org/abs/2601.15719) and [Official Implementation](https://github.com/mrjunjieli/wespeaker_u_cube)
+* Model: `U_CUBE_XI_ECAPA_TDNN_GLOB_c512` / `U_CUBE_XI_ResNet34` / `U_CUBE_XI_ReDimNetB2`, with the `U_Cube_XI` pooling and the `arc_margin_uncertainty` projection
+* The model outputs a speaker embedding together with its covariance; stage 4 of the recipe writes it to `xvector_variance.scp` next to the embeddings
+* Large margin fine-tuning is supported via `conf/u_cube_xi_ecapa_lm.yaml`
+
+```bash
+bash run_u3xi.sh --stage 3 --stop_stage 5
+```
+
+| Model | Params | Unc.-aware score | LM | AS-Norm | vox1-O-clean | vox1-E-clean | vox1-H-clean |
+|:------|:------:|:----------------:|:--:|:-------:|:------------:|:------------:|:------------:|
+| ECAPA_TDNN_GLOB_c512-ASTP-emb192 | 6.19M | × | × | × | 1.069 | 1.209 | 2.310 |
+| U_CUBE_XI_ECAPA_TDNN_GLOB_c512 | 6.69M | × | × | × | 0.856 | 1.064 | 1.982 |
+| U_CUBE_XI_ECAPA_TDNN_GLOB_c512 | 6.69M | √ | × | × | 0.782 | 1.016 | 1.888 |
+| ResNet34-TSTP-emb256 | 6.63M | × | × | × | 0.867 | 1.049 | 1.959 |
+| U_CUBE_XI_ResNet34 | 8.09M | × | × | × | 0.888 | 0.900 | 1.712 |
+| U_CUBE_XI_ResNet34 | 8.09M | √ | × | × | 0.867 | 0.868 | 1.641 |
+| ReDimNet-B2-ASTP-emb192 | 4.89M | × | × | × | 0.782 | 0.907 | 1.667 |
+| U_CUBE_XI_ReDimNetB2 | 5.46M | × | × | × | 0.649 | 0.801 | 1.532 |
+| U_CUBE_XI_ReDimNetB2 | 5.46M | √ | × | × | 0.606 | 0.779 | 1.494 |
+| U_CUBE_XI_ReDimNetB2 | 5.46M | √ | √ | × | 0.489 | 0.698 | 1.311 |
+| U_CUBE_XI_ReDimNetB2 | 5.46M | √ | √ | √ | **0.399** | **0.638** | **1.170** |
+
+> **Note:** All the results are reproduced on **VoxCeleb** only, using
+> whole-utterance cosine scoring with Vox2-dev mean normalization and
+> without QMF calibration.
+>
+> **Unc.-aware score** indicates whether the embedding covariance enters the
+> cosine scoring (√) or not (×). Comparing the ×- and √-rows of the same
+> U³-xi model isolates the gain brought by the uncertainty-aware scoring,
+> e.g. 0.856 -> 0.782 for `U_CUBE_XI_ECAPA_TDNN_GLOB_c512` on vox1-O-clean.
+>
+> All the numbers are taken from the
+> [official implementation](https://github.com/mrjunjieli/wespeaker_u_cube),
+> whose checkpoints were retrained, so your results may differ slightly.
+> This PR ships `conf/u_cube_xi_ecapa.yaml`, `conf/u_cube_xi_resnet.yaml` and
+> `conf/u_cube_xi_redimnet.yaml` (all without LM), plus
+> `conf/u_cube_xi_ecapa_lm.yaml` for large margin fine-tuning.
+>
+> TorchScript and ONNX export are not supported for the U³-xi models, because the multi-view self-attention pooling cannot be scripted. Training, embedding extraction and scoring are unaffected, and the standard WeSpeaker models are untouched.

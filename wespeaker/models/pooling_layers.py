@@ -23,6 +23,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import wespeaker.models.multi_view_attention as multi_view_attention
+
 
 class TAP(nn.Module):
     """
@@ -414,6 +416,97 @@ class XI(torch.nn.Module):
 
     def get_prior(self):
         return self.prior_mean, self.prior_logprec
+
+
+class U_Cube_XI(torch.nn.Module):
+    '''Uncertainty-aware XI pooling.
+
+    Reference:
+        U^3-xi: Pushing the Boundaries of Speaker Recognition by
+        Incorporating Uncertainty. https://arxiv.org/abs/2601.15719
+
+    Compared to :class:`XI`, the frame-level log-precision is estimated by a
+    multi-view self-attention encoder, and both the Gaussian posterior mean
+    and the posterior variance are returned.
+    '''
+
+    def __init__(self, in_dim, hidden_size=256, num_heads=8,
+                 train_mean=True, train_prec=True, **kwargs):
+        super(U_Cube_XI, self).__init__()
+        self.input_dim = in_dim
+        self.output_dim = self.input_dim
+        self.prior_mean = torch.nn.Parameter(torch.zeros(1, self.input_dim),
+                                             requires_grad=train_mean)
+        self.prior_logprec = torch.nn.Parameter(torch.zeros(1, self.input_dim),
+                                                requires_grad=train_prec)
+        self.softmax = torch.nn.Softmax(dim=2)
+
+        # Log-precision estimator
+        self.lin1_relu_bn = nn.Sequential(
+            nn.Conv1d(self.input_dim, hidden_size,
+                      kernel_size=1, stride=1, bias=True),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm1d(hidden_size))
+        self.encoder_layer = (
+            multi_view_attention.MultiViewTransformerEncoderLayer(
+                embed_dim=hidden_size,
+                num_heads=num_heads,
+                ff_hidden=hidden_size * 4,
+                dropout=0.2))
+        self.lin2 = nn.Conv1d(hidden_size, self.input_dim, kernel_size=1,
+                              stride=1, bias=True)
+        self.softplus2 = torch.nn.Softplus(beta=1, threshold=20)
+
+    def forward(self, inputs):
+        """
+        @inputs: a 3-dimensional tensor (a batch),
+        including [samples-index, frames-dim-index, frames-index].
+        A 4-dimensional tensor (ResNet-like backbones) is flattened
+        along the channel and frequency axes first.
+
+        Returns:
+            posterior mean: (B, input_dim)
+            posterior variance: (B, input_dim)
+        """
+        if len(inputs.shape) > 3:
+            # (B, C, F, T) -> (B, C * F, T)
+            inputs = torch.flatten(inputs, start_dim=1, end_dim=2)
+        assert len(inputs.shape) == 3
+        assert inputs.shape[1] == self.input_dim
+        feat = inputs
+        # Log-precision estimator
+        # frame precision estimate
+        temp = self.lin1_relu_bn(feat)
+        temp = self.encoder_layer(temp.permute(0, 2, 1)).permute(0, 2, 1)
+        logprec = self.softplus2(self.lin2(temp))
+
+        # Square and take log before softmax
+        logprec = 2.0 * torch.log(logprec)
+        CLAMP_MIN = -15.0
+        CLAMP_MAX = 15.0
+        logprec = logprec.clamp(min=CLAMP_MIN, max=CLAMP_MAX)
+        # Gaussian Posterior Inference
+        # Option 1: a_o (prior_mean-phi) included in variance
+        logprec_with_prior = torch.cat(
+            (logprec,
+             self.prior_logprec.repeat(
+                 logprec.shape[0], 1).unsqueeze(dim=2)), 2)
+        weight_attn = self.softmax(logprec_with_prior)
+        # Posterior precision
+        Ls = torch.sum(torch.exp(logprec_with_prior), dim=2)
+        # Posterior mean
+        phi = torch.sum(torch.cat(
+            (feat, self.prior_mean.repeat(
+                feat.shape[0], 1).unsqueeze(dim=2)), 2) * weight_attn, dim=2)
+
+        return phi, 1.0 / torch.clamp(Ls, min=1.0e-12)
+
+    def get_out_dim(self):
+        return self.output_dim
+
+    def get_prior(self):
+        return self.prior_mean, self.prior_logprec
+
 
 if __name__ == '__main__':
     data = torch.randn(16, 512, 10, 35)
