@@ -12,7 +12,9 @@ save_epoch_interval: 10 # save model every 10 epochs
 log_batch_interval: 100 # log every 100 batchs
 
 dataloader_args:
-  batch_size: 512
+  # 2 GPUs x 256 = 512 in total, i.e. the same effective batch size and
+  # peak lr (0.8) as 1 GPU x 512
+  batch_size: 256
   num_workers: 12
   pin_memory: False
   prefetch_factor: 8
