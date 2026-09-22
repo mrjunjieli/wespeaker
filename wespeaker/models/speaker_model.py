@@ -24,12 +24,15 @@ import wespeaker.models.whisper_PMFA as whisper_PMFA
 import wespeaker.models.redimnet as redimnet
 import wespeaker.models.redimnet2 as redimnet2
 import wespeaker.models.samresnet as samresnet
+import wespeaker.models.u_cube_xi as u_cube_xi
 import wespeaker.models.xi_vector as xi_vector
 import wespeaker.models.w2vbert_adapter_mfa as w2vbert_adapter_mfa
 
 
 def get_speaker_model(model_name: str):
-    if model_name.startswith("XVEC"):
+    if model_name.startswith("U_CUBE_XI"):
+        return getattr(u_cube_xi, model_name)
+    elif model_name.startswith("XVEC"):
         return getattr(tdnn, model_name)
     elif model_name.startswith("ECAPA_TDNN"):
         return getattr(ecapa_tdnn, model_name)

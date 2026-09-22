@@ -34,6 +34,13 @@ def get_projection(conf):
                                       scale=conf['scale'],
                                       margin=0.0,
                                       easy_margin=conf['easy_margin'])
+    elif conf['project_type'] == 'arc_margin_uncertainty':
+        projection = ArcMarginProduct_uncertainty(
+            conf['embed_dim'],
+            conf['num_class'],
+            scale=conf['scale'],
+            margin=0.0,
+            easy_margin=conf['easy_margin'])
     elif conf['project_type'] == 'arc_margin_intertopk_subcenter':
         projection = ArcMarginProduct_intertopk_subcenter(
             conf['embed_dim'],
@@ -234,6 +241,105 @@ class ArcMarginProduct(nn.Module):
         one_hot = input.new_zeros(cosine.size())
         one_hot.scatter_(1, label.view(-1, 1).long(), 1)
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+        output *= self.scale
+
+        return output
+
+    def extra_repr(self):
+        return '''in_features={}, out_features={}, scale={},
+                  margin={}, easy_margin={}'''.format(self.in_features,
+                                                      self.out_features,
+                                                      self.scale, self.margin,
+                                                      self.easy_margin)
+
+
+class ArcMarginProduct_uncertainty(nn.Module):
+    r"""Implement of large margin arc distance with uncertainty scaling:
+        Reference:
+            U^3-xi: Pushing the Boundaries of Speaker Recognition by
+            Incorporating Uncertainty. https://arxiv.org/abs/2601.15719
+        Args:
+            in_features: size of each input sample
+            out_features: size of each output sample
+            scale: norm of input feature
+            margin: margin
+            cos(theta + margin)
+
+        Compared to :class:`ArcMarginProduct`, ``forward`` also takes the
+        diagonal embedding covariance and rescales the logits by an
+        uncertainty-aware factor, so that unreliable (high variance)
+        samples contribute a smaller softmax scale.
+        """
+
+    def __init__(self,
+                 in_features,
+                 out_features,
+                 scale=32.0,
+                 margin=0.2,
+                 easy_margin=False):
+        super(ArcMarginProduct_uncertainty, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.scale = scale
+        self.margin = margin
+        self.weight = nn.Parameter(torch.FloatTensor(out_features,
+                                                     in_features))
+        nn.init.xavier_uniform_(self.weight)
+
+        self.easy_margin = easy_margin
+        self.cos_m = math.cos(margin)
+        self.sin_m = math.sin(margin)
+        self.th = math.cos(math.pi - margin)
+        self.mm = math.sin(math.pi - margin) * margin
+        self.mmm = 1.0 + math.cos(
+            math.pi - margin)  # this can make the output more continuous
+        self.m = self.margin
+
+    def update(self, margin=0.2):
+        self.margin = margin
+        self.cos_m = math.cos(margin)
+        self.sin_m = math.sin(margin)
+        self.th = math.cos(math.pi - margin)
+        self.mm = math.sin(math.pi - margin) * margin
+        self.m = self.margin
+        self.mmm = 1.0 + math.cos(math.pi - margin)
+
+    def forward(self, input, covariance, label):
+        cosine = F.linear(F.normalize(input), F.normalize(self.weight))
+        sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
+        phi = cosine * self.cos_m - sine * self.sin_m
+        if self.easy_margin:
+            phi = torch.where(cosine > 0, phi, cosine)
+        else:
+            phi = torch.where(cosine > self.th, phi, cosine - self.mmm)
+
+        # Margin between the target class and the closest non-target class.
+        # Gradient is not propagated through the uncertainty scaling term.
+        with torch.no_grad():
+            target_cos = cosine[torch.arange(cosine.size(0),
+                                             device=cosine.device),
+                                label].unsqueeze(1)
+            cosine_without_target = cosine.masked_fill(
+                F.one_hot(label, num_classes=cosine.size(1)).to(torch.bool),
+                float('-inf'))
+            max_non_target_cos, _ = cosine_without_target.max(dim=1,
+                                                              keepdim=True)
+            cosine_gap = target_cos - max_non_target_cos
+
+        one_hot = input.new_zeros(cosine.size())
+        one_hot.scatter_(1, label.view(-1, 1).long(), 1)
+        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+
+        # Uncertainty scaling: (x^T x) / (x^T (cov + Lambda) x)
+        eps = 1e-6
+        Lambda = -cosine_gap + 0.5
+        numerator = torch.sum(input * input, dim=1, keepdim=True)
+        denominator = torch.sum(
+            input * (covariance + Lambda + eps) * input + eps,
+            dim=1, keepdim=True)
+        uncertainty_scale = (numerator / denominator) ** 0.5
+        output *= uncertainty_scale
+
         output *= self.scale
 
         return output
