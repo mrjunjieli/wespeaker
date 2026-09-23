@@ -35,6 +35,7 @@ import torch.nn.functional as F
 
 import wespeaker.models.ecapa_tdnn as ecapa_tdnn
 import wespeaker.models.redimnet as redimnet
+import wespeaker.models.redimnet2 as redimnet2
 import wespeaker.models.resnet as resnet
 
 
@@ -132,6 +133,42 @@ class U_CUBE_XI_ReDimNet(_SegU3XiMixin, redimnet.ReDimNet):
     """ReDimNet that also returns the diagonal embedding covariance."""
 
 
+class U_CUBE_XI_ReDimNet2Wrap(redimnet2.ReDimNet2Wrap):
+    """ReDimNet2 that also returns the diagonal embedding covariance.
+
+    ``return_all_outputs`` is not supported in the U^3-xi variant; the
+    intermediate 1-D outputs are silently dropped so the return signature
+    stays (embed_a, var_diag, embed_b).
+    """
+
+    def forward(self, x):
+        if self.pad_right_samples is not None:
+            x = torch.nn.functional.pad(
+                x, (0, self.pad_right_samples), mode='constant', value=None)
+        if self.spec is not None and self.spec != 'fbank':
+            x = self.spec(x)
+        if x.ndim == 3:
+            x = x.unsqueeze(1)
+        if self.return_all_outputs:
+            out, _ = self.backbone(x)
+        else:
+            out = self.backbone(x)
+        if out.ndim == 4:
+            bs, C, F, T = out.size()
+            out = out.reshape(bs, C * F, T)
+        if self.before_pool_offset is not None:
+            out = out[:, :, self.before_pool_offset:]
+        stats, var_diag = self.pool(out)
+        out = self.bn(stats)
+        var_diag = _propagate_diag_var_bn(var_diag, self.bn)
+        out = self.linear(out)
+        var_diag = _propagate_diag_var_linear(var_diag, self.linear)
+        if self.bn2 is not None:
+            out = self.bn2(out)
+            var_diag = _propagate_diag_var_bn(var_diag, self.bn2)
+        return torch.tensor(0.0), var_diag, out
+
+
 def U_CUBE_XI_ECAPA_TDNN_c512(feat_dim,
                               embed_dim,
                               pooling_func='U_Cube_XI',
@@ -212,4 +249,163 @@ def U_CUBE_XI_ReDimNetB2(feat_dim=72,
         pooling_func=pooling_func,
         global_context_att=True,
         two_emb_layer=two_emb_layer,
+    )
+
+
+def U_CUBE_XI_ReDimNet2Custom(feat_dim,
+                               embed_dim,
+                               pooling_func='U_Cube_XI',
+                               **kwargs):
+    return U_CUBE_XI_ReDimNet2Wrap(
+        feat_dim=feat_dim,
+        embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        **kwargs,
+    )
+
+
+def U_CUBE_XI_ReDimNet2B0(feat_dim=72,
+                           embed_dim=192,
+                           pooling_func='U_Cube_XI',
+                           **kwargs):
+    stages_setup = [
+        [[1, 1], 2, 2, [[3, 3]], 36],
+        [[2, 1], 3, 1, [[3, 3]], 36],
+        [[1, 2], 4, 1, [[3, 3]], 36],
+        [[2, 1], 5, 1, [[3, 3]], 36],
+        [[1, 2], 4, 1, [[3, 3]], 18],
+        [[2, 1], 3, 1, [[3, 3]], 18],
+    ]
+    return U_CUBE_XI_ReDimNet2Wrap(
+        C=12, out_channels=64,
+        feat_dim=feat_dim, embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        stages_setup=stages_setup,
+        **kwargs,
+    )
+
+
+def U_CUBE_XI_ReDimNet2B1(feat_dim=72,
+                           embed_dim=192,
+                           pooling_func='U_Cube_XI',
+                           **kwargs):
+    stages_setup = [
+        [[1, 1], 2, 2, [[3, 3]], 32],
+        [[2, 1], 3, 1, [[3, 3]], 32],
+        [[1, 2], 4, 1, [[3, 3]], 32],
+        [[2, 1], 5, 1, [[3, 3]], 32],
+        [[1, 2], 4, 1, [[3, 3]], 16],
+        [[2, 1], 3, 1, [[3, 3]], 16],
+    ]
+    return U_CUBE_XI_ReDimNet2Wrap(
+        C=16, out_channels=64,
+        feat_dim=feat_dim, embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        stages_setup=stages_setup,
+        **kwargs,
+    )
+
+
+def U_CUBE_XI_ReDimNet2B2(feat_dim=72,
+                           embed_dim=192,
+                           pooling_func='U_Cube_XI',
+                           **kwargs):
+    stages_setup = [
+        [[1, 1], 2, 2, [[3, 5]], 40],
+        [[2, 1], 3, 1, [[3, 5]], 30],
+        [[1, 2], 4, 1, [[3, 5]], 30],
+        [[3, 1], 5, 1, [[3, 5]], 20],
+        [[1, 2], 4, 1, [[3, 7]], 20],
+        [[2, 1], 3, 1, [[3, 7]], 10],
+    ]
+    return U_CUBE_XI_ReDimNet2Wrap(
+        C=20, out_channels=64,
+        feat_dim=feat_dim, embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        stages_setup=stages_setup,
+        **kwargs,
+    )
+
+
+def U_CUBE_XI_ReDimNet2B3(feat_dim=72,
+                           embed_dim=192,
+                           pooling_func='U_Cube_XI',
+                           **kwargs):
+    stages_setup = [
+        [[1, 1], 2, 2, [[3, 3]], 36],
+        [[2, 1], 3, 1, [[3, 3]], 36],
+        [[1, 2], 4, 1, [[3, 3]], 36],
+        [[2, 1], 5, 1, [[3, 3]], 36],
+        [[1, 2], 4, 1, [[3, 3]], 18],
+        [[2, 1], 3, 1, [[3, 3]], 18],
+    ]
+    return U_CUBE_XI_ReDimNet2Wrap(
+        C=24, out_channels=64,
+        feat_dim=feat_dim, embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        stages_setup=stages_setup,
+        **kwargs,
+    )
+
+
+def U_CUBE_XI_ReDimNet2B4(feat_dim=72,
+                           embed_dim=192,
+                           pooling_func='U_Cube_XI',
+                           **kwargs):
+    stages_setup = [
+        [[1, 1], 2, 4, [[3, 3]], 24],
+        [[2, 1], 3, 3, [[3, 3]], 24],
+        [[1, 2], 4, 2, [[3, 3]], 24],
+        [[2, 1], 5, 1, [[3, 3]], 24],
+        [[1, 2], 4, 1, [[3, 3]], 24],
+        [[2, 1], 3, 1, [[3, 3]], 24],
+    ]
+    return U_CUBE_XI_ReDimNet2Wrap(
+        C=32,
+        feat_dim=feat_dim, embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        stages_setup=stages_setup,
+        **kwargs,
+    )
+
+
+def U_CUBE_XI_ReDimNet2B5(feat_dim=72,
+                           embed_dim=192,
+                           pooling_func='U_Cube_XI',
+                           **kwargs):
+    stages_setup = [
+        [[1, 1], 2, 4, [[3, 3]], 48],
+        [[2, 1], 3, 3, [[3, 3]], 48],
+        [[1, 2], 4, 2, [[3, 3]], 48],
+        [[2, 1], 5, 1, [[3, 3]], 48],
+        [[1, 2], 4, 1, [[3, 3]], 32],
+        [[2, 1], 3, 1, [[3, 3]], 32],
+    ]
+    return U_CUBE_XI_ReDimNet2Wrap(
+        C=48, out_channels=256,
+        feat_dim=feat_dim, embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        stages_setup=stages_setup,
+        **kwargs,
+    )
+
+
+def U_CUBE_XI_ReDimNet2B6(feat_dim=72,
+                           embed_dim=192,
+                           pooling_func='U_Cube_XI',
+                           **kwargs):
+    stages_setup = [
+        [[1, 1], 3, 3, [[3, 3]], 64],
+        [[2, 1], 4, 2, [[3, 3]], 64],
+        [[1, 2], 5, 2, [[3, 3]], 48],
+        [[2, 1], 5, 1, [[3, 3]], 48],
+        [[1, 2], 4, 0.75, [[3, 3]], 32],
+        [[2, 1], 3, 0.5, [[3, 3]], 24],
+    ]
+    return U_CUBE_XI_ReDimNet2Wrap(
+        C=64, out_channels=224, return_2d_output=True,
+        feat_dim=feat_dim, embed_dim=embed_dim,
+        pooling_func=pooling_func,
+        stages_setup=stages_setup,
+        **kwargs,
     )

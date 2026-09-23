@@ -23,8 +23,8 @@
 # multi-node + multi-gpus:
 #   bash run_u3xi.sh --stage 3 --stop-stage 3 --HOST_NODE_ADDR "xxx.xxx.xxx.xxx:port" --num_nodes num_node
 
-stage=-1
-stop_stage=-1
+stage=3
+stop_stage=5
 
 HOST_NODE_ADDR="localhost:29400"
 num_nodes=1
@@ -33,8 +33,8 @@ job_id=2024
 data=data
 data_type="shard"  # shard/raw
 
-config=conf/u_cube_xi_ecapa.yaml
-exp_dir=exp/U_CUBE_XI_ECAPA_TDNN_GLOB_c512-emb192-fbank80-num_frms200-aug0.6-spTrue-saFalse-ArcMarginUncertainty-SGD-epoch150
+config=conf/u_cube_xi_redimnet2.yaml
+exp_dir=exp/U_CUBE_XI_ReDimNet2B6-tfmel-emb192-fbank72-num_frms200-aug0.6-spTrue-saFalse-ArcMarginUncertainty-SGD-epoch120
 gpus="[0,1]"
 num_avg=10
 checkpoint=
@@ -44,7 +44,7 @@ score_norm_method="asnorm"  # asnorm/snorm
 top_n=300
 
 # setup for large margin fine-tuning
-lm_config=conf/u_cube_xi_ecapa_lm.yaml
+lm_config=conf/u_cube_xi_redimnet2_lm.yaml
 
 . tools/parse_options.sh || exit 1
 

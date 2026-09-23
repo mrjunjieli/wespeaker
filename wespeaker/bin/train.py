@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader
 import wespeaker.utils.schedulers as schedulers
 from wespeaker.dataset.dataset import Dataset
 from wespeaker.frontend import *
-from wespeaker.models.projections import get_projection
+from wespeaker.models.projections import get_projection, SphereFace2_uncertainty_Arcguide_inter_intra
 from wespeaker.models.speaker_model import get_speaker_model
 from wespeaker.utils.checkpoint import load_checkpoint, save_checkpoint
 from wespeaker.utils.executor import run_epoch
@@ -235,6 +235,20 @@ def train(config='conf/config.yaml', **kwargs):
     scaler = torch.cuda.amp.GradScaler(enabled=configs['enable_amp'])
     for epoch in range(start_epoch, configs['num_epochs'] + 1):
         train_dataset.set_epoch(epoch)
+
+        # alpha scheduling for SphereFace2_uncertainty_Arcguide_inter_intra
+        if isinstance(model.projection, SphereFace2_uncertainty_Arcguide_inter_intra):
+            alpha_conf = configs.get('alpha_schedule', {})
+            alpha_final = alpha_conf.get('alpha_final', 0.3)
+            ws = alpha_conf.get('alpha_warmup_start', 60)
+            we = alpha_conf.get('alpha_warmup_end', 140)
+            if epoch < ws:
+                model.projection.current_alpha = 0.0
+            elif epoch >= we:
+                model.projection.current_alpha = alpha_final
+            else:
+                model.projection.current_alpha = alpha_final * (
+                    epoch - ws) / max(1, we - ws)
 
         run_epoch(train_dataloader,
                   epoch_iter,
