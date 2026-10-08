@@ -49,7 +49,7 @@ model_args:
 model_init: null
 
 projection_args:
-  project_type: "sphereface2_uncertainty_arcguide_inter_intra"
+  project_type: "sphereface2"
   scale: 32.0
   lanbuda: 0.7
   t: 3
