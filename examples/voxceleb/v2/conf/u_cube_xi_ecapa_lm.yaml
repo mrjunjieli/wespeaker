@@ -62,7 +62,7 @@ model_args:
   embed_dim: 192
   pooling_func: "U_Cube_XI"
 projection_args:
-  project_type: "arc_margin_uncertainty" # arc_margin, arc_margin_uncertainty
+  project_type: "arc_margin" # arc_margin, arc_margin_uncertainty
   scale: 32.0
   easy_margin: False
 

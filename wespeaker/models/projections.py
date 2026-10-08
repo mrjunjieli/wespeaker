@@ -93,6 +93,10 @@ class SphereFace2_uncertainty_Arcguide_inter_intra(nn.Module):
     is added: loss = sphereface2_loss + current_alpha * arc_ce_loss.
     """
 
+    # ``forward`` also takes the (diagonal) covariance returned by
+    # U^3-xi pooling layers, i.e. forward(input, covariance, label).
+    accepts_uncertainty = True
+
     def __init__(self,
                  in_features,
                  out_features,
@@ -405,7 +409,11 @@ class ArcMarginProduct_uncertainty(nn.Module):
         diagonal embedding covariance and rescales the logits by an
         uncertainty-aware factor, so that unreliable (high variance)
         samples contribute a smaller softmax scale.
-        """
+    """
+
+    # ``forward`` also takes the (diagonal) covariance returned by
+    # U^3-xi pooling layers, i.e. forward(input, covariance, label).
+    accepts_uncertainty = True
 
     def __init__(self,
                  in_features,
