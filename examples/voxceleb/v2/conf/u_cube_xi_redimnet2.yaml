@@ -1,7 +1,7 @@
 exp_dir: exp/U_CUBE_XI_ReDimNet2B6-tfmel-emb192-fbank72-num_frms200-aug0.6-spTrue-saFalse-ArcMarginUncertainty-SGD-epoch120
 gpus: "[0,1]"
 num_avg: 10
-enable_amp: false
+enable_amp: true
 data_type: shard
 
 seed: 42
