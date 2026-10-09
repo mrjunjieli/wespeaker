@@ -1,0 +1,119 @@
+### train configuration
+# MECT: Mixture of Experts with CNN-Transformer Network for Speaker
+# verification. https://arxiv.org/abs/2609.24061
+# Official code (inference only): https://github.com/ant-research/AntSpeaker
+#
+# Training recipe (from the paper):
+#   - 80-d mean-normalized (in-model CMN) log Mel fbank, 25ms/10ms
+#   - VoxCeleb2 dev + speed perturb (0.9/1.1), MUSAN+RIR aug, 2s segments
+#   - SGD (momentum 0.9, weight decay 2e-5), batch size 512
+#   - peak lr 0.6 with 4-epoch warmup, exponentially decayed to 4e-4
+#     at epoch 120 (note: WeSpeaker scales the lr by
+#     scale_ratio = world_size * batch_size / 64 = 8)
+#   - SphereFace2 loss (margin type C), margin 0 -> 0.2 (epoch 20 -> 40)
+#   - ASTP pooling, 192-d embedding, frame-level dense MoE with 4 experts
+#     (the best "F-Dense-4" setting in the paper)
+
+exp_dir: exp/MECT_B2-emb192-fbank80-num_frms200-aug0.6-spTrue-saFalse-SphereFace2-SGD-epoch120
+gpus: "[0,1]"
+num_avg: 10
+enable_amp: False # whether enable automatic mixed precision training
+
+seed: 42
+num_epochs: 120
+save_epoch_interval: 10 # save model every 10 epochs
+log_batch_interval: 100 # log every 100 batchs
+
+dataloader_args:
+  # 2 GPUs x 256 = 512 in total, the same batch size as the MECT paper
+  batch_size: 256
+  num_workers: 8
+  pin_memory: False
+  prefetch_factor: 8
+  drop_last: True
+
+dataset_args:
+  # the sample number which will be traversed within one epoch, if the value equals to 0,
+  # the utterance number in the dataset will be used as the sample_num_per_epoch.
+  sample_num_per_epoch: 0
+  shuffle: True
+  shuffle_args:
+    shuffle_size: 2500
+  filter: True
+  filter_args:
+    min_num_frames: 100
+    max_num_frames: 800
+  resample_rate: 16000
+  speed_perturb: True
+  num_frms: 200 # 2-second segments in the training stage
+  aug_prob: 0.6 # prob to add reverb & noise aug per sample
+  frontend: "fbank" # fbank, s3prl
+  fbank_args:
+    num_mel_bins: 80
+    frame_shift: 10
+    frame_length: 25
+    dither: 1.0
+  spec_aug: False
+  spec_aug_args:
+    num_t_mask: 1
+    num_f_mask: 1
+    max_t: 10
+    max_f: 8
+    prob: 0.6
+  # MECT performs per-utterance cepstral mean normalization inside the
+  # model, following the official implementation
+  cmvn: False
+
+# MECT model: CMN -> CNN-Transformer backbone with Mixture-of-Experts ->
+# multi-scale DenseWeight fusion -> ASTP pooling -> BN -> Linear(192)
+# model: MECT_A1 / MECT_A2 / MECT_B1 / MECT_B2
+model: MECT_B2
+model_init: null
+model_args:
+  feat_dim: 80
+  embed_dim: 192
+  pooling_func: "ASTP"
+  # MoE settings (default: frame-level dense MoE with 4 experts, i.e.
+  # the F-Dense-4 variant used by the VoxCeleb recipe in the paper).
+  # Other variants, e.g. the CN-Celeb recipe (frame-level sparse MoE
+  # with 8 experts, top-4), can be configured as:
+  #   moe_type: "token"
+  #   num_experts_token: 8
+  #   top_k_token: 4
+  moe_type: "token"
+  num_experts_token: 4
+  top_k_token: null
+
+projection_args:
+  project_type: "sphereface2"
+  scale: 32.0
+  t: 3
+  lanbuda: 0.7
+  margin_type: "C"
+
+margin_scheduler: MarginScheduler
+margin_update:
+  initial_margin: 0.0
+  final_margin: 0.2
+  increase_start_epoch: 20
+  fix_start_epoch: 40
+  update_margin: True
+  increase_type: "exp" # exp, linear
+
+loss: CrossEntropyLoss
+loss_args: {}
+
+optimizer: SGD
+optimizer_args:
+  momentum: 0.9
+  nesterov: True
+  weight_decay: 2.0e-05
+
+scheduler: ExponentialDecrease
+scheduler_args:
+  # effective peak lr = 0.075 * scale_ratio(8) = 0.6,
+  # effective final lr = 5e-5 * 8 = 4e-4
+  initial_lr: 0.075
+  final_lr: 5.0e-05
+  warm_up_epoch: 4
+  warm_from_zero: True

@@ -1,0 +1,109 @@
+### Large margin fine-tuning configuration for MECT
+#
+#   The large margin fine-tuning operation is often used in speaker
+#   verification challenge system to further improve the performance.
+#   In this fine-tuning stage, large margin and longer segment will
+#   be used.
+#
+# MECT paper LMF settings:
+#   - remove speed perturbation (5,994 speakers)
+#   - 6-second segments
+#   - fixed margin 0.3, lr 2e-4, 7 epochs
+# MECT: https://arxiv.org/abs/2609.24061
+
+exp_dir: exp/MECT_B2-emb192-fbank80-num_frms200-aug0.6-spTrue-saFalse-SphereFace2-SGD-epoch120-LM
+gpus: "[0,1]"
+num_avg: 1
+enable_amp: False # whether enable automatic mixed precision training
+do_lm: True
+
+seed: 42
+num_epochs: 7
+save_epoch_interval: 1 # save model per epoch
+log_batch_interval: 100
+
+dataloader_args:
+  # 2 GPUs x 64 = 128 in total
+  # effective peak lr = 1e-4 * scale_ratio(2) = 2e-4, the same as the paper
+  batch_size: 64
+  num_workers: 8
+  pin_memory: False
+  prefetch_factor: 8
+  drop_last: True
+
+dataset_args:
+  # the sample number which will be traversed within one epoch, if the value equals to 0,
+  # the utterance number in the dataset will be used as the sample_num_per_epoch.
+  sample_num_per_epoch: 0
+  shuffle: True
+  shuffle_args:
+    shuffle_size: 2500
+  filter: True
+  filter_args:
+    min_num_frames: 100
+    max_num_frames: 800
+  resample_rate: 16000
+  # No speed perturb in the large-margin fine-tuning stage (paper)
+  speed_perturb: False
+  num_frms: 600 # 6-second segments in the LMF stage
+  aug_prob: 0.6 # prob to add reverb & noise aug per sample
+  frontend: "fbank" # fbank, s3prl
+  fbank_args:
+    num_mel_bins: 80
+    frame_shift: 10
+    frame_length: 25
+    dither: 1.0
+  spec_aug: False
+  spec_aug_args:
+    num_t_mask: 1
+    num_f_mask: 1
+    max_t: 10
+    max_f: 8
+    prob: 0.6
+  # MECT performs per-utterance cepstral mean normalization inside the
+  # model, following the official implementation
+  cmvn: False
+
+model: MECT_B2
+model_init: null
+model_args:
+  feat_dim: 80
+  embed_dim: 192
+  pooling_func: "ASTP"
+  moe_type: "token"
+  num_experts_token: 4
+  top_k_token: null
+
+projection_args:
+  project_type: "sphereface2"
+  scale: 32.0
+  t: 3
+  lanbuda: 0.7
+  margin_type: "C"
+
+margin_scheduler: MarginScheduler
+margin_update:
+  # fixed margin 0.3 in the large-margin fine-tuning stage (paper)
+  initial_margin: 0.3
+  final_margin: 0.3
+  increase_start_epoch: 1
+  fix_start_epoch: 1
+  update_margin: True
+  increase_type: "exp" # exp, linear
+
+loss: CrossEntropyLoss
+loss_args: {}
+
+optimizer: SGD
+optimizer_args:
+  momentum: 0.9
+  nesterov: True
+  weight_decay: 2.0e-05
+
+scheduler: ExponentialDecrease
+scheduler_args:
+  # effective peak lr = 1e-4 * scale_ratio(2) = 2e-4
+  initial_lr: 1.0e-4
+  final_lr: 2.5e-05
+  warm_up_epoch: 1
+  warm_from_zero: True

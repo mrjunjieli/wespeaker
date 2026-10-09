@@ -27,6 +27,7 @@ import wespeaker.models.samresnet as samresnet
 import wespeaker.models.u_cube_xi as u_cube_xi
 import wespeaker.models.xi_vector as xi_vector
 import wespeaker.models.w2vbert_adapter_mfa as w2vbert_adapter_mfa
+import wespeaker.models.mect as mect
 
 
 def get_speaker_model(model_name: str):
@@ -60,6 +61,8 @@ def get_speaker_model(model_name: str):
         return getattr(xi_vector, model_name)
     elif model_name.startswith("W2VBert_Adapter_MFA"):
         return getattr(w2vbert_adapter_mfa, model_name)
+    elif model_name.startswith("MECT"):
+        return getattr(mect, model_name)
     else:  # model_name error !!!
         print(model_name + " not found !!!")
         exit(1)
