@@ -34,6 +34,7 @@ import torch
 import torch.nn.functional as F
 
 import wespeaker.models.ecapa_tdnn as ecapa_tdnn
+import wespeaker.models.mect as mect
 import wespeaker.models.redimnet as redimnet
 import wespeaker.models.redimnet2 as redimnet2
 import wespeaker.models.resnet as resnet
@@ -167,6 +168,93 @@ class U_CUBE_XI_ReDimNet2Wrap(redimnet2.ReDimNet2Wrap):
             out = self.bn2(out)
             var_diag = _propagate_diag_var_bn(var_diag, self.bn2)
         return torch.tensor(0.0), var_diag, out
+
+
+class U_CUBE_XI_MECT(mect.MECT):
+    """MECT that also returns the diagonal embedding covariance.
+
+    The MECT backbone already outputs frame-level features of shape
+    (B, C, T), which is exactly what :class:`U_Cube_XI` pooling expects.
+    Only ``forward`` is overridden, therefore the parameter set -- and
+    thus the state dict -- is identical to the corresponding standard
+    MECT model.
+    """
+
+    def forward(self, x):
+        # (B, T, F) -> (B, F, T)
+        x = x.permute(0, 2, 1)
+        if self.cmn:
+            with torch.no_grad():
+                x = x - torch.mean(x, -1, keepdim=True)
+
+        frame_feat = self.backbone(x)  # (B, C, T)
+
+        stats, var_diag = self.pool(frame_feat)  # U_Cube_XI pooling
+
+        # mean branch
+        out = self.bn(stats)
+        # variance branch
+        var_diag = _propagate_diag_var_bn(var_diag, self.bn)
+        out = self.linear(out)
+        var_diag = _propagate_diag_var_linear(var_diag, self.linear)
+
+        if self.emb_bn:
+            out = self.bn2(out)
+            var_diag = _propagate_diag_var_bn(var_diag, self.bn2)
+
+        return frame_feat, var_diag, out
+
+
+def U_CUBE_XI_MECT_A1(feat_dim,
+                      embed_dim,
+                      pooling_func='U_Cube_XI',
+                      emb_bn=False,
+                      **moe_kwargs):
+    return U_CUBE_XI_MECT(variant='A1',
+                          feat_dim=feat_dim,
+                          embed_dim=embed_dim,
+                          pooling_func=pooling_func,
+                          emb_bn=emb_bn,
+                          **moe_kwargs)
+
+
+def U_CUBE_XI_MECT_A2(feat_dim,
+                      embed_dim,
+                      pooling_func='U_Cube_XI',
+                      emb_bn=False,
+                      **moe_kwargs):
+    return U_CUBE_XI_MECT(variant='A2',
+                          feat_dim=feat_dim,
+                          embed_dim=embed_dim,
+                          pooling_func=pooling_func,
+                          emb_bn=emb_bn,
+                          **moe_kwargs)
+
+
+def U_CUBE_XI_MECT_B1(feat_dim,
+                      embed_dim,
+                      pooling_func='U_Cube_XI',
+                      emb_bn=False,
+                      **moe_kwargs):
+    return U_CUBE_XI_MECT(variant='B1',
+                          feat_dim=feat_dim,
+                          embed_dim=embed_dim,
+                          pooling_func=pooling_func,
+                          emb_bn=emb_bn,
+                          **moe_kwargs)
+
+
+def U_CUBE_XI_MECT_B2(feat_dim,
+                      embed_dim,
+                      pooling_func='U_Cube_XI',
+                      emb_bn=False,
+                      **moe_kwargs):
+    return U_CUBE_XI_MECT(variant='B2',
+                          feat_dim=feat_dim,
+                          embed_dim=embed_dim,
+                          pooling_func=pooling_func,
+                          emb_bn=emb_bn,
+                          **moe_kwargs)
 
 
 def U_CUBE_XI_ECAPA_TDNN_c512(feat_dim,
