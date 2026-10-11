@@ -160,7 +160,7 @@ class SphereFace2_uncertainty_Arcguide_inter_intra(nn.Module):
 
         Lambda = (-cosine_gap + 1.2).clamp(min=0.0)
         eps = 1e-6
-        cov_denom = (covariance + Lambda + eps).clamp(min=0.9)
+        cov_denom = (covariance + Lambda + eps).clamp(min=0.3)
         numerator = torch.sum(input * input, dim=1, keepdim=True)
         denominator = torch.sum(
             input * cov_denom * input + eps, dim=1, keepdim=True)
